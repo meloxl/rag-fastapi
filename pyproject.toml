@@ -1,0 +1,9 @@
+[project]
+name = "rag-fastapi-local"
+version = "1.0.0"
+description = "本地恋爱知识库 RAG 问答服务"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+
+[tool.uv]
+# 与 FastAPI 官方推荐环境对齐，默认 Python 3.11
