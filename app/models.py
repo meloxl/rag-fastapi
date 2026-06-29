@@ -36,3 +36,4 @@ class HealthResponse(BaseModel):
     embed_provider: str
     embed_model: str
     llm_model: str
+    rag_provider: str

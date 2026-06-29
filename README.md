@@ -18,7 +18,7 @@
 ## 安装与启动
 
 ```bash
-cd rag-fastapi-local
+cd rag-fastapi
 python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -42,6 +42,20 @@ curl http://127.0.0.1:8000/health
 ```bash
 curl -X POST http://127.0.0.1:8000/build_kb
 ```
+
+### 2.1 切换到百炼云知识库
+
+默认 `RAG_PROVIDER=local`，继续使用本地 Chroma 检索 + LLM 生成。若要使用阿里云百炼应用绑定的云知识库“恋爱大师集合”，在 `.env` 中配置：
+
+```env
+RAG_PROVIDER=bailian
+BAILIAN_APP_ID=w6gsdtpq67
+BAILIAN_WORKSPACE_ID=ws-kjehcatf1uzce0xp
+BAILIAN_API_KEY=your-dashscope-api-key
+BAILIAN_API_BASE=https://dashscope.aliyuncs.com/api/v1
+```
+
+百炼模式下 `/ask` 会直接调用百炼应用 API，跳过本地 `chroma_db` 检查；`/build_kb` 仍保留为本地模式专用。
 
 ### 3. 提问
 
@@ -119,6 +133,11 @@ OPENAI_COMPATIBLE_API_KEY=your-api-key
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
+| `RAG_PROVIDER` | `local` | RAG 后端：`local` / `bailian` |
+| `BAILIAN_APP_ID` | `w6gsdtpq67` | 百炼应用 ID，需在控制台绑定云知识库 |
+| `BAILIAN_WORKSPACE_ID` | `ws-kjehcatf1uzce0xp` | 百炼子业务空间 ID，用于 `X-DashScope-WorkSpace` 请求头 |
+| `BAILIAN_API_KEY` | — | 百炼 / DashScope API Key |
+| `BAILIAN_API_BASE` | `https://dashscope.aliyuncs.com/api/v1` | 百炼应用 API 地址 |
 | `LLM_MODEL` | `Qwen/Qwen3-VL-8B-Instruct` | 生成模型（OpenAI 兼容 Chat API） |
 | `LLM_API_BASE` | `OPENAI_COMPATIBLE_API_BASE` | 生成模型 API 地址 |
 | `LLM_API_KEY` | `OPENAI_COMPATIBLE_API_KEY` | 生成模型 API Key |

@@ -2,7 +2,7 @@ import os
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
-from app.config import DOCS_DIR, LLM_MODEL
+from app.config import DOCS_DIR, LLM_MODEL, RAG_PROVIDER
 from app.rag.embeddings import get_embed_info
 from app.models import (
     AskRequest,
@@ -12,6 +12,7 @@ from app.models import (
     UploadResponse,
 )
 from app.rag.chain import ask_question
+from app.rag.diagnostics import check_bailian_config
 from app.rag.reader import list_markdown_files, load_documents, sanitize_upload_filename
 from app.rag.transformer import split_documents
 from app.rag.writer import build_vector_store, is_kb_built
@@ -38,6 +39,7 @@ def health() -> HealthResponse:
         embed_provider=embed_info["embed_provider"],
         embed_model=embed_info["embed_model"],
         llm_model=LLM_MODEL,
+        rag_provider=RAG_PROVIDER,
     )
 
 
@@ -65,7 +67,7 @@ def build_kb() -> BuildKbResponse:
 
 @app.post("/ask", response_model=AskResponse, summary="恋爱知识问答")
 def ask(body: AskRequest) -> AskResponse:
-    if not is_kb_built():
+    if RAG_PROVIDER == "local" and not is_kb_built():
         raise HTTPException(status_code=400, detail="请先调用 POST /build_kb 构建知识库")
 
     try:
@@ -77,6 +79,21 @@ def ask(body: AskRequest) -> AskResponse:
     except Exception as exc:
         message = str(exc)
         lower_message = message.lower()
+        
+        # 处理百炼应用的 403 权限错误
+        if "app.accessdenied" in lower_message or ("http 403" in lower_message and "bailian" in lower_message.lower()):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"百炼应用访问被拒绝（403）。请检查：\n"
+                    "1. BAILIAN_API_KEY 是否仍有效（可能已过期或被撤销）\n"
+                    "2. BAILIAN_APP_ID 是否与当前 API Key 对应\n"
+                    "3. 应用在百炼平台是否启用且有权限\n"
+                    "4. 账户是否有足够的配额\n\n"
+                    f"完整错误：{message}"
+                ),
+            ) from exc
+        
         if (
             "connection refused" in lower_message
             or "failed to connect" in lower_message
@@ -120,3 +137,33 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
         message="文件上传成功，请调用 POST /build_kb 重建向量库后生效",
         filename=safe_name,
     )
+
+
+@app.get("/diagnostics", summary="百炼应用诊断", tags=["诊断"])
+def diagnostics() -> dict:
+    """
+    检查百炼应用配置和连接状态
+    
+    返回示例：
+    ```json
+    {
+      "api_key_set": true,
+      "app_id_set": true,
+      "api_base": "https://dashscope.aliyuncs.com/api/v1",
+      "api_key_preview": "sk-xxxxxxxx...xxxx",
+      "app_id": "w6gsdtpq67",
+      "timeout": 60,
+      "connection_test": "成功",
+      "error": null
+    }
+    ```
+    """
+    if RAG_PROVIDER != "bailian":
+        return {
+            "status": "info",
+            "message": f"当前 RAG_PROVIDER 为 '{RAG_PROVIDER}'，不是 'bailian'",
+            "rag_provider": RAG_PROVIDER,
+        }
+    
+    results = check_bailian_config()
+    return results
