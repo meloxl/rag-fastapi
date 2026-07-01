@@ -1,4 +1,4 @@
-"""百炼应用诊断工具 - 帮助快速排查 403 权限问题"""
+"""百炼 RAG 诊断：Retrieve API（默认）与百炼应用 API（备用）。"""
 
 import json
 import urllib.error
@@ -9,14 +9,18 @@ from app.config import (
     BAILIAN_API_BASE,
     BAILIAN_API_KEY,
     BAILIAN_APP_ID,
+    BAILIAN_CALL_MODE,
+    BAILIAN_INDEX_ID,
     BAILIAN_TIMEOUT,
     BAILIAN_WORKSPACE_ID,
 )
+from app.rag.bailian_retrieve import test_retrieve_connection
 
 
-def check_bailian_config() -> dict[str, Any]:
-    """检查百炼应用配置和连接状态"""
+def check_bailian_app_config() -> dict[str, Any]:
+    """检查百炼应用 completion API 配置和连接状态（备用模式）。"""
     results = {
+        "mode": "app",
         "api_key_set": bool(BAILIAN_API_KEY),
         "app_id_set": bool(BAILIAN_APP_ID),
         "api_base": BAILIAN_API_BASE,
@@ -33,7 +37,6 @@ def check_bailian_config() -> dict[str, Any]:
         results["error"] = "API Key 或 App ID 未设置"
         return results
 
-    # 测试连接
     url = f"{BAILIAN_API_BASE}/apps/{BAILIAN_APP_ID}/completion"
     body = {
         "input": {"prompt": "测试"},
@@ -61,29 +64,7 @@ def check_bailian_config() -> dict[str, Any]:
         status_code = exc.code
         detail = exc.read().decode("utf-8", errors="replace")
         results["connection_test"] = f"失败 - HTTP {status_code}"
-        
-        if status_code == 403:
-            results["error"] = (
-                "【HTTP 403 - 访问被拒绝】\n"
-                "可能的原因：\n"
-                "1. API Key 已失效、过期或被撤销\n"
-                "2. API Key 与 App ID 不匹配\n"
-                "3. 子业务空间应用缺少或填错 Workspace ID\n"
-                "4. 应用在百炼平台被禁用\n"
-                "5. 账户配额已用尽或余额不足\n"
-                "6. API Key 权限不足\n\n"
-                f"错误详情：{detail}"
-            )
-        elif status_code == 401:
-            results["error"] = (
-                "【HTTP 401 - 认证失败】\n"
-                "API Key 可能无效。请检查：\n"
-                "1. BAILIAN_API_KEY 值是否正确\n"
-                "2. 是否正确地使用了 DASHSCOPE_API_KEY 别名\n\n"
-                f"错误详情：{detail}"
-            )
-        else:
-            results["error"] = f"HTTP {status_code} 错误：{detail}"
+        results["error"] = f"HTTP {status_code} 错误：{detail}"
     except urllib.error.URLError as exc:
         results["error"] = f"无法连接：{exc.reason}"
     except Exception as exc:
@@ -92,26 +73,48 @@ def check_bailian_config() -> dict[str, Any]:
     return results
 
 
+def check_bailian_config() -> dict[str, Any]:
+    """按 BAILIAN_CALL_MODE 检查当前百炼后端。"""
+    if BAILIAN_CALL_MODE == "app":
+        return check_bailian_app_config()
+    return test_retrieve_connection()
+
+
 def print_diagnostics() -> None:
-    """打印诊断信息到控制台"""
+    """打印诊断信息到控制台。"""
     results = check_bailian_config()
-    
-    print("\n" + "="*60)
-    print("百炼应用诊断信息")
-    print("="*60)
-    print(f"API Base URL: {results['api_base']}")
-    print(f"Expected Base: {results['expected_api_base']}")
-    print(f"API Key: {results['api_key_preview']}")
-    print(f"App ID: {results['app_id']}")
-    print(f"Workspace ID: {results['workspace_id']}")
-    print(f"超时设置: {results['timeout']}s")
-    print(f"连接测试: {results['connection_test']}")
-    
-    if results["error"]:
+
+    print("\n" + "=" * 60)
+    if BAILIAN_CALL_MODE == "app":
+        print("百炼应用诊断信息（completion API，备用模式）")
+    else:
+        print("百炼云知识库诊断信息（Retrieve API，默认模式）")
+    print("=" * 60)
+    print(f"调用模式: {BAILIAN_CALL_MODE}")
+
+    if BAILIAN_CALL_MODE == "app":
+        print(f"API Base URL: {results.get('api_base')}")
+        print(f"API Key: {results.get('api_key_preview')}")
+        print(f"App ID: {results.get('app_id')}")
+    else:
+        print("鉴权方式: Credentials 默认凭据链（不使用百炼 sk- API Key）")
+        print(f"Endpoint: {results.get('endpoint')}")
+        print(f"Region: {results.get('region_id')}")
+        print(f"Workspace ID: {results.get('workspace_id')}")
+        print(f"Index ID: {results.get('index_id') or BAILIAN_INDEX_ID}")
+        print(f"凭据可用: {results.get('credential_available')}")
+        print(f"AccessKey ID: {results.get('access_key_id_preview', '未获取')}")
+        print(f"使用 STS Token: {results.get('has_security_token')}")
+        print(f"检索切片数: {results.get('chunk_count', 0)}")
+
+    print(f"Workspace ID: {BAILIAN_WORKSPACE_ID or '未设置'}")
+    print(f"连接测试: {results.get('connection_test')}")
+
+    if results.get("error"):
         print(f"\n❌ 诊断结果：\n{results['error']}")
     else:
         print("\n✅ 诊断结果：配置正常，连接成功")
-    print("="*60 + "\n")
+    print("=" * 60 + "\n")
 
 
 if __name__ == "__main__":

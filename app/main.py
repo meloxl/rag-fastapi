@@ -139,24 +139,13 @@ async def upload(file: UploadFile = File(...)) -> UploadResponse:
     )
 
 
-@app.get("/diagnostics", summary="百炼应用诊断", tags=["诊断"])
+@app.get("/diagnostics", summary="百炼 RAG 诊断", tags=["诊断"])
 def diagnostics() -> dict:
     """
-    检查百炼应用配置和连接状态
-    
-    返回示例：
-    ```json
-    {
-      "api_key_set": true,
-      "app_id_set": true,
-      "api_base": "https://dashscope.aliyuncs.com/api/v1",
-      "api_key_preview": "sk-xxxxxxxx...xxxx",
-      "app_id": "w6gsdtpq67",
-      "timeout": 60,
-      "connection_test": "成功",
-      "error": null
-    }
-    ```
+    检查百炼 RAG 配置和连接状态。
+
+    默认模式（BAILIAN_CALL_MODE=retrieve）：测试云知识库 Retrieve API。
+    备用模式（BAILIAN_CALL_MODE=app）：测试百炼应用 completion API。
     """
     if RAG_PROVIDER != "bailian":
         return {
@@ -164,6 +153,6 @@ def diagnostics() -> dict:
             "message": f"当前 RAG_PROVIDER 为 '{RAG_PROVIDER}'，不是 'bailian'",
             "rag_provider": RAG_PROVIDER,
         }
-    
+
     results = check_bailian_config()
     return results

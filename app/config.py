@@ -10,8 +10,36 @@ def _normalize_bailian_api_base(api_base: str) -> str:
         return "https://dashscope.aliyuncs.com/api/v1"
     return base
 
+
+def _normalize_credential(value: str) -> str:
+    """去除首尾空白及常见引号，避免 .env 复制带入导致签名失败。"""
+    return value.strip().strip('"').strip("'")
+
+
+def _sync_ram_credentials_to_env() -> None:
+    """将 .env 中 AK/SK 别名同步为标准环境变量，供 Credentials 默认凭据链读取。"""
+    if not os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_ID"):
+        ak = _normalize_credential(os.getenv("AK", ""))
+        if ak:
+            os.environ["ALIBABA_CLOUD_ACCESS_KEY_ID"] = ak
+    if not os.environ.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET"):
+        sk = _normalize_credential(os.getenv("SK", ""))
+        if sk:
+            os.environ["ALIBABA_CLOUD_ACCESS_KEY_SECRET"] = sk
+
+
+def _load_ram_access_key_id() -> str:
+    raw = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID") or os.getenv("AK") or ""
+    return _normalize_credential(raw)
+
+
+def _load_ram_access_key_secret() -> str:
+    raw = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET") or os.getenv("SK") or ""
+    return _normalize_credential(raw)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+_sync_ram_credentials_to_env()
 
 DOCS_DIR = os.getenv("DOCS_DIR", str(BASE_DIR / "docs"))
 CHROMA_DIR = os.getenv("CHROMA_DIR", str(BASE_DIR / "chroma_db"))
@@ -67,11 +95,25 @@ BAILIAN_API_KEY = os.getenv(
     os.getenv("DASHSCOPE_API_KEY", ""),
 )
 BAILIAN_APP_ID = os.getenv("BAILIAN_APP_ID", "w6gsdtpq67")
+BAILIAN_INDEX_ID = os.getenv("BAILIAN_INDEX_ID", BAILIAN_APP_ID)
 BAILIAN_WORKSPACE_ID = os.getenv(
     "BAILIAN_WORKSPACE_ID",
     os.getenv("DASHSCOPE_WORKSPACE_ID", "ws-kjehcatf1uzce0xp"),
 )
 BAILIAN_TIMEOUT = float(os.getenv("BAILIAN_TIMEOUT", "60"))
+# bailian 调用模式：retrieve（云知识库 Retrieve + LLM，默认）| app（百炼应用 completion，备用）
+BAILIAN_CALL_MODE = os.getenv("BAILIAN_CALL_MODE", "retrieve").strip().lower()
+BAILIAN_ENDPOINT = os.getenv("BAILIAN_ENDPOINT", "bailian.cn-beijing.aliyuncs.com")
+BAILIAN_REGION_ID = os.getenv("BAILIAN_REGION_ID", "cn-beijing")
+BAILIAN_RETRIEVE_ENABLE_RERANKING = os.getenv("BAILIAN_RETRIEVE_ENABLE_RERANKING", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+# Retrieve 鉴权由 Credentials 默认凭据链提供（见 app/rag/aliyun_credentials.py），
+# 不在业务代码中直接读取 Secret；以下仅用于诊断是否已配置环境变量。
+ALIBABA_CLOUD_ACCESS_KEY_ID = _load_ram_access_key_id()
+ALIBABA_CLOUD_ACCESS_KEY_SECRET = _load_ram_access_key_secret()
 
 RETRIEVE_K = int(os.getenv("RETRIEVE_K", "3"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0"))
