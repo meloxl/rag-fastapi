@@ -74,9 +74,13 @@ LLM_API_BASE=https://api.siliconflow.cn/v1
 
 **调用链路**：百炼 Retrieve 检索云知识库切片 → 硅基流动等 LLM 生成回答。
 
-**凭证说明**：
-
-- `AK`/`SK`：RAM AccessKey，用于 Retrieve API（与 DashScope `sk-` Key 不同）
+**凭证说明**（Credentials 默认凭据链，由 `aliyun_credentials.py` 管理）：
+- `ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET`：RAM AccessKey，用于 Retrieve API（与 DashScope `sk-` Key 不同，格式通常以 `LTAI` 开头）
+- 也可使用别名 `AK` / `SK`，会自动同步到标准环境变量
+- **支持多种凭证源**（优先级从高到低）：
+  1. 环境变量（`ALIBABA_CLOUD_ACCESS_KEY_ID` / `ALIBABA_CLOUD_ACCESS_KEY_SECRET` 或 `AK` / `SK`）
+  2. 阿里云 CLI 配置（`~/.aliyun/config.json`）
+  3. ECS/ACK 实例角色（生产环境推荐，无需配置 AK/SK）
 - `BAILIAN_INDEX_ID`：知识库 ID，需在百炼控制台获取（**通常与应用 App ID 不同**）
 - `LLM_API_KEY`：OpenAI 兼容 Chat API，用于最终回答生成
 
@@ -219,3 +223,46 @@ OPENAI_COMPATIBLE_API_KEY=your-api-key
 | `LLM_API_KEY` | `OPENAI_COMPATIBLE_API_KEY` | 生成模型 API Key |
 | `RETRIEVE_K` | `3` | 检索条数（local Chroma / bailian Retrieve） |
 | `LLM_TEMPERATURE` | `0` | 生成温度 |
+
+---
+
+## 故障排查
+
+### 常见问题 1：`No module named 'alibabacloud_credentials'`
+- **解决**：确保已运行 `pip install -r requirements.txt` 安装所有依赖
+
+### 常见问题 2：百炼 Retrieve 诊断失败，提示「AccessKey ID 格式异常」
+- **原因**：使用了 DashScope API Key（`sk-` 开头）或 STS Token，而不是 RAM AccessKey
+- **解决**：
+  1. 在阿里云 RAM 控制台创建/获取 RAM AccessKey（格式以 `LTAI` 开头）
+  2. 为该 RAM 用户授权 `AliyunBailianDataFullAccess` 权限
+  3. 在 `.env` 中配置：
+     ```
+     ALIBABA_CLOUD_ACCESS_KEY_ID=LTAIxxxxxxxxxx
+     ALIBABA_CLOUD_ACCESS_KEY_SECRET=xxxxxxxxxx
+     ```
+
+### 常见问题 3：看到 `failed to update OAuth tokens in config file` 警告
+- **原因**：本地阿里云 CLI 配置文件权限问题
+- **说明**：这是警告不影响功能，可忽略或检查 `~/.aliyun/config.json` 权限
+
+### 常见问题 4：本地模式报错 Chroma 未初始化
+- **解决**：运行 `POST /build_kb` 接口先构建本地知识库向量库
+
+---
+
+## 项目结构总结
+
+```
+app/
+├── rag/
+│   ├── aliyun_credentials.py  # ✨ 新增：阿里云 Credentials 默认凭据链封装
+│   ├── bailian_retrieve.py    # 百炼 Retrieve API 客户端
+│   ├── bailian.py             # 百炼应用 completion 客户端（备用）
+│   ├── diagnostics.py         # 百炼诊断工具
+│   ├── chain.py               # 查询增强与 RAG 分流
+│   ├── reader.py              # 文档读取
+│   ├── transformer.py         # 文档切分
+│   ├── writer.py              # 向量库写入
+│   └── embeddings.py          # Embedding 工厂
+```
